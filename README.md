@@ -2,8 +2,8 @@
 
 > A local-first, Windows-native AI agent that can see, hear, remember, act — and ask before it does something that matters.
 
-**Status:** Stage 1 — ECHO Core Functional & Verified.
-The core desktop application is runnable, with active WebSocket streaming, local SQLite persistence (WAL mode), persistent memory vault, dynamic AI model routing (Mock / Ollama / OpenAI-compatible), full configuration management, and a futuristic dark Command Center UI.
+**Status:** Stage 2 — ECHO Desktop Control Functional & Verified.
+ECHO now possesses native Windows desktop interaction through a strictly typed, permissioned tool system. No arbitrary command lines or unvetted scripts are ever executed by the AI.
 
 ---
 
@@ -19,99 +19,92 @@ It is built around one rule:
 
 ---
 
-## Implemented Core Features (Stage 1)
+## Implemented Desktop Capabilities (Stage 2)
 
-1. **ECHO Futuristic Command Center UI:**
-   - Dark, obsidian and neon cyan aesthetic (`#05070A`, `#00F0FF`, `#0070F3`).
-   - Living status orb reflecting daemon state (`idle`, `thinking`, `speaking`, `executing`, `error`).
-   - Conversation history list with persistent storage, real-time message counter, and deletion controls.
-   - Rich Markdown message rendering with copy buttons, timestamps, streaming cursors, and syntax-highlighted code blocks.
-   - Generation controls: stop generation button and retry response.
-   - Collapsible telemetry drawer with live workstation metrics (CPU, RAM, Disk, Uptime).
+ECHO's Windows desktop control substrate is built around a typed `ToolRegistry` with schema validation, permission gates, timeouts, and SQLite audit logging.
 
-2. **AI Provider Abstraction (`echo/brain`):**
-   - Pluggable `ModelProvider` interface supporting streaming completions.
-   - **Deterministic Mock Provider:** Built-in offline testing provider with realistic conversational streaming and status reporting.
-   - **OpenAI-Compatible Provider:** Connects to OpenAI, OpenRouter, DeepSeek, LM Studio, or vLLM endpoints.
-   - **Local Ollama Provider:** Direct HTTP integration (`127.0.0.1:11434`) for offline local neural models.
-   - Dynamic prompt generation injecting recalled persistent memory context.
+### 1. Screen Perception (`echo/tools/screen.py`)
+- `screen.capture_desktop`: High-resolution full screen capture saved to `%LOCALAPPDATA%\Echo\screenshots` with real-time base64 thumbnail generation for AI vision.
+- `screen.capture_region`: Bounded screenshot of specific screen coordinates and dimensions.
+- **Safety Fallback:** Automatic degradation to headless/locked screen synthetic buffers if graphics context (`BitBlt`) is unavailable.
 
-3. **Persistent Memory Vault (`echo/memory`):**
-   - Categorized knowledge store (`fact`, `project`, `preference`, `context`).
-   - SQLite FTS5 full-text search indexing for sub-millisecond retrieval.
-   - Automatic classification and protection of sensitive information (passwords, private keys, auth tokens excluded from general context).
-   - Interactive Memory Explorer UI modal to search, inspect, add, and delete memories.
+### 2. Window Management (`echo/tools/window.py`)
+- `window.list`: Enumerates visible top-level Windows applications, handles (`HWND`), process IDs, and titles via native Win32 `EnumWindows`.
+- `window.get_active`: Reads the current foreground window title, handle, and executable process.
+- `window.switch`: Focuses and brings target window to foreground via `SetForegroundWindow`.
+- `window.minimize`: Minimizes target window (`SW_MINIMIZE`).
+- `window.maximize`: Maximizes target window (`SW_MAXIMIZE`).
+- `window.restore`: Restores minimized or maximized window (`SW_RESTORE`).
+- `window.close`: Safely sends `WM_CLOSE` to window (**APPROVAL REQUIRED**).
 
-4. **Task & Goal Queue (`echo/api/routes/tasks.py`):**
-   - Dedicated task tracking system supporting goal creation, status transitions, and lifecycle tracking.
-   - Tasks modal UI to inspect, complete, or remove tasks.
+### 3. Mouse Interaction (`echo/tools/mouse.py`)
+- `mouse.move`: Moves cursor to target $(x, y)$ coordinates with monitor bounds checking.
+- `mouse.click`: Single click at current or target position (left, right, middle button).
+- `mouse.double_click`: Double click target button.
+- `mouse.right_click`: Context menu right click.
+- `mouse.scroll`: Mouse wheel scrolling with directional step counts.
 
-5. **Local-First SQLite Architecture (`echo/core/database.py`):**
-   - SQLite 3 running in Write-Ahead Logging (WAL) mode with busy timeout handling.
-   - Automated versioned schema migrations (`schema_version`).
-   - Clean data persistence under `%LOCALAPPDATA%\Echo\data\echo.db` (with automatic fallback to `./data/`).
+### 4. Keyboard Input (`echo/tools/keyboard.py`)
+- `keyboard.type_text`: Text entry into active window with configurable character pacing.
+- `keyboard.press_key`: Single key press (`enter`, `esc`, `tab`, `backspace`, etc.).
+- `keyboard.hotkey`: Native key combinations (`ctrl+c`, `win+r`, `alt+tab`).
 
-6. **FastAPI Loopback Daemon & WebSocket Gateway (`echo/api`):**
-   - Bound strictly to `127.0.0.1`.
-   - REST endpoints for health checks (`/healthz`, `/readyz`), system status, metrics, conversations, memory, tasks, and settings.
-   - High-throughput WebSocket endpoint (`/api/v1/ws`) for bidirectional streaming, heartbeats, and stop commands.
+### 5. Application Lifecycle (`echo/tools/applications.py`)
+- `application.list`: Lists safe approved shortcuts and running desktop GUI processes.
+- `application.launch`: Launches approved Windows binaries (Notepad, Calculator, Paint, Explorer, Task Manager, Web Browser).
+- `application.close`: Gracefully terminates application by PID or process name (**APPROVAL REQUIRED**).
+
+### 6. Safe Filesystem Operations (`echo/tools/filesystem.py`)
+- `filesystem.list_dir`: Lists directory contents with sizes and modification timestamps.
+- `filesystem.search`: Recursive pattern search (`*.txt`, `report*`) with result limits.
+- `filesystem.read_file`: Reads safe document text up to configured character limits.
+- `filesystem.create_folder`: Safe directory creation.
+- `filesystem.rename_file`: Safe file renaming.
+- `filesystem.copy_file`: File copying with path safety verification.
+- `filesystem.move_file`: Moves file to target path (**APPROVAL REQUIRED**).
+
+### 7. Clipboard System (`echo/tools/clipboard.py`)
+- `clipboard.read`: Reads active text content from Windows clipboard.
+- `clipboard.write`: Sets clipboard contents.
+
+### 8. Basic Windows Actions (`echo/tools/system_actions.py`)
+- `system.open_settings`: Opens Windows Settings panel (`ms-settings:`).
+- `system.open_explorer`: Opens File Explorer at target or default directory.
+- `system.open_task_manager`: Opens Task Manager (`taskmgr.exe`).
+- `system.open_browser`: Navigates default browser to validated URL.
 
 ---
 
-## Getting Started & Development
+## Security & Permission Model
 
-### Prerequisites
-- **OS:** Windows 10 (22H2+) or Windows 11
-- **Python:** 3.11+
-- **Node.js:** 20+ LTS
+| Permission Level | Description | Behavior |
+|---|---|---|
+| **AUTOMATIC** | Non-destructive queries, screen captures, file reads, window listing, basic typing/clicks | Executes immediately within sandbox timeout |
+| **APPROVAL_REQUIRED** | Window closing, process termination, file movement, destructive modifications | Halts execution, registers pending approval request, and displays visual confirmation dialog |
 
-### 1. Installation
+### Security Invariants Enforced:
+1. **Path Traversal Prevention:** Target paths are resolved and checked. Access to `Windows\System32\config`, `SAM`, credential vaults, `.ssh`, `.aws`, `.env`, and private keys is hard-blocked.
+2. **No Arbitrary Command Execution:** LLM is strictly prohibited from generating raw shell/PowerShell strings. Only registered, typed Pydantic tools can execute.
+3. **Audit Trail:** Every tool invocation, whether automatic or approved, is logged to `action_logs` with timestamps, actor, parameters, and status.
 
-```powershell
-# Create Python virtual environment and install backend dependencies
-python -m venv .venv
-.\.venv\Scripts\pip install -r requirements.txt
+---
 
-# Install frontend dependencies
-npm --prefix frontend install
-```
+## Control Panel & UI Features
 
-### 2. Configuration
+- **ECHO Control Panel Modal:**
+  - Real-time catalog of all registered tools with schema specifications and permission indicators.
+  - Interactive "Execute" tool launcher for manual testing and verification.
+  - Active foreground window inspector with instant screenshot capture and image preview.
+  - Pending approval queue with parameter inspection.
+  - Chronological action log feed.
+- **Visual Approval Dialog:**
+  - High-visibility amber security dialog showing exact tool parameters before any restricted operation can proceed.
 
-Copy the example environment file:
-```powershell
-cp .env.example .env
-```
+---
 
-Key environment variables:
-- `ECHO_HOST=127.0.0.1`: Daemon host binding (loopback).
-- `ECHO_PORT=8000`: Daemon port.
-- `ECHO_AI_PROVIDER=mock`: Active provider (`mock`, `ollama`, `openai`).
-- `ECHO_AI_MODEL=echo-fast-v1`: Active model identifier.
-- `ECHO_AI_API_KEY`: API key for external cloud models (optional, can also be configured via UI).
+## Development & Test Commands
 
-### 3. Running in Development Mode
-
-Run both the backend daemon and the frontend UI concurrently using the provided script:
-```powershell
-.\scripts\dev.ps1
-```
-Or start them in separate terminals:
-
-**Terminal 1 (Backend Daemon):**
-```powershell
-.\.venv\Scripts\python -m uvicorn echo.api.app:app --host 127.0.0.1 --port 8000 --reload
-```
-
-**Terminal 2 (Frontend Command Center):**
-```powershell
-cd frontend
-npm run dev
-```
-Open **`http://127.0.0.1:5173`** in your browser.
-
-### 4. Running the Test Suite
-
+### 1. Run the Full Test Suite
 ```powershell
 .\scripts\test.ps1
 ```
@@ -119,6 +112,13 @@ Or directly with pytest:
 ```powershell
 .\.venv\Scripts\pytest -o pythonpath=. -v
 ```
+*(All 27 backend tests across core, memory, brain, and desktop tools pass.)*
+
+### 2. Launch Development Environment
+```powershell
+.\scripts\dev.ps1
+```
+Open **`http://127.0.0.1:5173`** and click **Desktop Control** in the left sidebar to access the Control Panel.
 
 ---
 
@@ -128,28 +128,15 @@ Or directly with pytest:
 |---|---|---|
 | 0 | Architecture, security model, UI direction, roadmap | ✅ Complete |
 | 1 | Foundation: ECHO Core (Daemon, SQLite WAL, UI Shell, Memory, Brain) | ✅ Complete |
-| 2 | Advanced AI Brain & Multi-Provider Streaming Reasoning | Planned |
-| 3 | Advanced Episodic & Procedural Memory with Vector Embeddings | Planned |
+| 2 | Desktop Control: Tool Registry, Win32 API, Screen, Mouse, Keyboard, Approvals | ✅ Complete |
+| 3 | Persistent Memory: Vector Embeddings & Reciprocal Rank Fusion | Planned |
 | 4 | Tools, Permissions (T0–T4) & Hash-Chained Audit Trails | Planned |
 | 5 | Agent Planner & Verification Runtime State Machine | Planned |
 | 6 | File Intelligence & Safe Operations | Planned |
-| 7 | Desktop Control & Windows UI Automation | Planned |
+| 7 | Advanced Desktop Control (OCR & Accessibility Trees) | Planned |
 | 8 | Browser Automation (Playwright Sandboxing) | Planned |
 | 9 | Voice Interaction (openWakeWord, Whisper, Piper) | Planned |
 | 10 | Monitoring & Notifications (Event Log, Hardware Telemetry) | Planned |
 | 11 | Scheduler & Autonomous Routines | Planned |
 | 12 | Remote Contact & Escalation Calls | Planned |
 | 13 | Desktop Packaging, Hardening & Release | Planned |
-
----
-
-## Documentation
-
-| Document | Purpose |
-|---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, 14 modules, SQLite schema, IPC protocols. |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Detailed acceptance criteria and definitions of done for Stages 0–13. |
-| [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md) | Trust boundaries, STRIDE threat analysis, prompt injection defense. |
-| [docs/TOOL-CONTRACT.md](docs/TOOL-CONTRACT.md) | Pydantic schemas, 7-step execution pipeline, verification rules. |
-| [docs/UI-DESIGN.md](docs/UI-DESIGN.md) | Visual tokens, dark futuristic palette, screen architecture. |
-| [docs/DECISIONS.md](docs/DECISIONS.md) | Architecture Decision Records (ADRs 001–006). |

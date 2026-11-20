@@ -1,36 +1,40 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from echo.api.routes import chat, health, memory, settings, tasks
+from echo.api.routes import chat, health, memory, settings, tasks, tools
 from echo.api.websocket import router as ws_router
 from echo.core.config import get_settings
 from echo.core.database import get_database
 from echo.core.events import get_event_bus
 from echo.core.logging import setup_logging
+from echo.tools.bootstrap import initialize_all_tools
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("DEBUG LIFESPAN: entering", flush=True)
+    # Startup sequence
     cfg = get_settings()
-    print("DEBUG LIFESPAN: got settings", flush=True)
     logger = setup_logging(debug=cfg.debug)
-    print("DEBUG LIFESPAN: setup logging", flush=True)
+    logger.info("Initializing ECHO Core Daemon on %s:%d...", cfg.host, cfg.port)
 
     # Initialize SQLite database & migrations
     db = get_database()
-    print("DEBUG LIFESPAN: got db", flush=True)
+    logger.info("SQLite database verified at: %s", db.db_path)
+
+    # Register all tools
+    initialize_all_tools()
+    logger.info("Desktop Tools Registry initialized.")
 
     # Start Event Bus
     bus = get_event_bus()
     bus.start()
-    print("DEBUG LIFESPAN: bus started, yielding", flush=True)
+    logger.info("In-process Event Bus started.")
 
     yield
 
-    print("DEBUG LIFESPAN: post-yield, stopping bus", flush=True)
+    # Shutdown sequence
     await bus.stop()
-    print("DEBUG LIFESPAN: bus stopped", flush=True)
+    logger.info("ECHO Core Daemon shutdown complete.")
 
 
 def create_app() -> FastAPI:
@@ -39,7 +43,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="ECHO Core Daemon",
         description="Personal AI Assistant Daemon API and WebSocket Gateway",
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
     )
 
@@ -56,6 +60,7 @@ def create_app() -> FastAPI:
     app.include_router(memory.router)
     app.include_router(tasks.router)
     app.include_router(settings.router)
+    app.include_router(tools.router)
     app.include_router(ws_router)
 
     return app

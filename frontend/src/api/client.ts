@@ -1,10 +1,14 @@
 import {
+  ActionLogItem,
+  ActiveWindowInfo,
   AppSettings,
+  ApprovalRequest,
   Conversation,
   MemoryItem,
   SystemMetrics,
   SystemStatus,
   TaskItem,
+  ToolItem,
 } from '../types';
 
 const API_BASE = 'http://127.0.0.1:8000/api/v1';
@@ -143,5 +147,57 @@ export const apiClient = {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   },
-};
 
+  // Tools & Desktop Control
+  async listTools(category?: string): Promise<{ tools: ToolItem[]; count: number }> {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    const res = await fetch(`${API_BASE}/tools?${params.toString()}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async executeTool(tool_name: string, args: Record<string, any> = {}, approval_id?: string) {
+    const res = await fetch(`${API_BASE}/tools/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tool_name,
+        arguments: args,
+        approval_id,
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async listApprovals(): Promise<ApprovalRequest[]> {
+    const res = await fetch(`${API_BASE}/tools/approvals`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async resolveApproval(request_id: string, approved: boolean): Promise<any> {
+    const res = await fetch(`${API_BASE}/tools/approvals/${request_id}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async getToolLogs(limit: number = 50): Promise<ActionLogItem[]> {
+    const res = await fetch(`${API_BASE}/tools/logs?limit=${limit}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async getActiveWindow(): Promise<ActiveWindowInfo> {
+    const res = await this.executeTool('window.get_active', {});
+    if (res.success && res.data) {
+      return res.data as ActiveWindowInfo;
+    }
+    return { handle: 0, title: 'Unknown', pid: 0, process_name: 'none' };
+  },
+};

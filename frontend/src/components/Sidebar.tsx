@@ -9,6 +9,8 @@ import {
   Settings as SettingsIcon,
   Zap,
   Activity,
+  Sliders,
+  ShieldAlert,
 } from 'lucide-react';
 import { Conversation, SystemStatus } from '../types';
 import { StatusOrb } from './StatusOrb';
@@ -22,10 +24,12 @@ interface SidebarProps {
   onOpenMemory: () => void;
   onOpenTasks: () => void;
   onOpenSettings: () => void;
+  onOpenControlPanel: () => void;
   onToggleContext: () => void;
   isContextOpen: boolean;
   status: SystemStatus | null;
   isConnected: boolean;
+  pendingApprovalsCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -37,10 +41,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenMemory,
   onOpenTasks,
   onOpenSettings,
+  onOpenControlPanel,
   onToggleContext,
   isContextOpen,
   status,
   isConnected,
+  pendingApprovalsCount = 0,
 }) => {
   return (
     <aside className="w-64 flex flex-col bg-[#07090E] border-r border-echo-border select-none">
@@ -52,7 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="flex items-center gap-1.5">
               <span className="font-bold tracking-wider text-white text-base">ECHO</span>
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-echo-cyan/10 border border-echo-cyan/30 text-echo-cyan font-mono">
-                v0.1
+                v0.2
               </span>
             </div>
             <div className="text-[11px] text-echo-muted font-mono">Personal AI Agent</div>
@@ -125,6 +131,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Navigation Tools */}
       <div className="p-2 border-t border-echo-border space-y-1 text-xs">
         <button
+          onClick={onOpenControlPanel}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-[#0F1420] transition-colors border border-echo-border/50"
+        >
+          <div className="flex items-center gap-2.5">
+            <Sliders className="w-4 h-4 text-echo-cyan" />
+            <span className="font-medium text-white">Desktop Control</span>
+          </div>
+          {pendingApprovalsCount > 0 ? (
+            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-echo-warning text-echo-void text-[10px] font-bold animate-pulse">
+              <ShieldAlert className="w-3 h-3" /> {pendingApprovalsCount}
+            </span>
+          ) : (
+            <span className="text-[10px] px-1 rounded bg-[#161B22] text-echo-cyan font-mono">20 Tools</span>
+          )}
+        </button>
+
+        <button
           onClick={onOpenTasks}
           className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#0F1420] transition-colors"
         >
@@ -168,4 +191,3 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </aside>
   );
 };
-

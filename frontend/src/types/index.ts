@@ -70,5 +70,40 @@ export interface TaskItem {
   updated_at: string;
 }
 
-export type AgentOrbState = 'idle' | 'thinking' | 'speaking' | 'executing' | 'error' | 'disconnected';
+export interface ToolItem {
+  name: string;
+  description: string;
+  category: 'screen' | 'window' | 'mouse' | 'keyboard' | 'application' | 'filesystem' | 'clipboard' | 'system';
+  permission_level: 'automatic' | 'approval_required';
+  schema: Record<string, any>;
+  timeout_seconds: number;
+}
 
+export interface ApprovalRequest {
+  id: string;
+  tool_name: string;
+  args: Record<string, any>;
+  category: string;
+  description: string;
+  status: 'pending' | 'approved' | 'denied' | 'expired';
+  created_at: string;
+  resolved_at?: string;
+}
+
+export interface ActionLogItem {
+  id: string;
+  action: string;
+  actor: string;
+  details: string;
+  status: string;
+  created_at: string;
+}
+
+export interface ActiveWindowInfo {
+  handle: number;
+  title: string;
+  pid: number;
+  process_name: string;
+}
+
+export type AgentOrbState = 'idle' | 'thinking' | 'speaking' | 'executing' | 'error' | 'disconnected';

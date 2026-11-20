@@ -6,7 +6,9 @@ import { ContextPanel } from './components/ContextPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { MemoryModal } from './components/MemoryModal';
 import { TasksModal } from './components/TasksModal';
-import { Conversation, Message, SystemStatus } from './types';
+import { ControlPanelModal } from './components/ControlPanelModal';
+import { ApprovalDialog } from './components/ApprovalDialog';
+import { ApprovalRequest, Conversation, Message, SystemStatus } from './types';
 import { apiClient } from './api/client';
 import { echoWs } from './api/ws';
 import { AlertCircle } from 'lucide-react';
@@ -20,6 +22,9 @@ export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMemoryOpen, setIsMemoryOpen] = useState(false);
   const [isTasksOpen, setIsTasksOpen] = useState(false);
+  const [isControlPanelOpen, setIsControlPanelOpen] = useState(false);
+  const [activeApproval, setActiveApproval] = useState<ApprovalRequest | null>(null);
+  const [pendingApprovals, setPendingApprovals] = useState<ApprovalRequest[]>([]);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -28,7 +33,11 @@ export const App: React.FC = () => {
   useEffect(() => {
     loadStatus();
     loadConversations();
-    const interval = setInterval(loadStatus, 5000);
+    checkPendingApprovals();
+    const interval = setInterval(() => {
+      loadStatus();
+      checkPendingApprovals();
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -41,6 +50,19 @@ export const App: React.FC = () => {
     } catch {
       setIsConnected(false);
       setErrorMessage('Backend daemon is offline. Please launch the ECHO backend service.');
+    }
+  };
+
+  const checkPendingApprovals = async () => {
+    try {
+      const list = await apiClient.listApprovals();
+      setPendingApprovals(list);
+      // Auto-popup first pending approval if not currently open
+      if (list.length > 0 && !activeApproval) {
+        setActiveApproval(list[0]);
+      }
+    } catch {
+      // quiet fallback
     }
   };
 
@@ -202,6 +224,16 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleResolveApproval = async (requestId: string, approved: boolean) => {
+    try {
+      await apiClient.resolveApproval(requestId, approved);
+      setActiveApproval(null);
+      checkPendingApprovals();
+    } catch (e) {
+      alert('Error resolving approval: ' + String(e));
+    }
+  };
+
   return (
     <div className="flex h-screen w-screen bg-echo-void text-echo-text overflow-hidden font-sans">
       {/* Left Sidebar */}
@@ -214,10 +246,12 @@ export const App: React.FC = () => {
         onOpenMemory={() => setIsMemoryOpen(true)}
         onOpenTasks={() => setIsTasksOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenControlPanel={() => setIsControlPanelOpen(true)}
         onToggleContext={() => setIsContextOpen(!isContextOpen)}
         isContextOpen={isContextOpen}
         status={systemStatus}
         isConnected={isConnected}
+        pendingApprovalsCount={pendingApprovals.length}
       />
 
       {/* Main Chat Stage */}
@@ -270,8 +304,19 @@ export const App: React.FC = () => {
         isOpen={isTasksOpen}
         onClose={() => setIsTasksOpen(false)}
       />
+
+      <ControlPanelModal
+        isOpen={isControlPanelOpen}
+        onClose={() => setIsControlPanelOpen(false)}
+        onTriggerApproval={(req) => setActiveApproval(req)}
+      />
+
+      <ApprovalDialog
+        request={activeApproval}
+        onResolve={handleResolveApproval}
+        onClose={() => setActiveApproval(null)}
+      />
     </div>
   );
 };
 export default App;
-
