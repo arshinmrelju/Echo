@@ -50,3 +50,62 @@
   }
 }
 
+/* Voice instrument orb ---------------------------------------------------- */
+
+.voice-orb-rotor,
+.voice-orb-rotor-reverse {
+  transform-box: view-box;
+  transform-origin: 100px 100px;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+
+.voice-orb-rotor {
+  animation-name: voice-orbit;
+}
+
+.voice-orb-rotor-reverse {
+  animation-name: voice-orbit-reverse;
+}
+
+@keyframes voice-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes voice-orbit-reverse {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+.voice-caret {
+  animation: voice-caret-blink 1.05s steps(2, start) infinite;
+}
+
+@keyframes voice-caret-blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-orb-rotor,
+  .voice-orb-rotor-reverse {
+    animation: none;
+  }
+  .voice-caret {
+    animation: none;
+  }
+}
+

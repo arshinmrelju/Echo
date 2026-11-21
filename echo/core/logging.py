@@ -1,13 +1,17 @@
 import logging
 import re
 import sys
-from typing import Any
 
 # Pattern to redact common secret tokens and keys
 SECRET_PATTERNS = [
-    re.compile(r"(?i)(api[-_]?key|secret|password|bearer|token)\s*[:=]\s*['\"]?([a-zA-Z0-9_\-\.]{8,})['\"]?"),
-    re.compile(r"sk-[a-zA-Z0-9]{20,}"),
-    re.compile(r"AIzaSy[a-zA-Z0-9_-]{33}"),
+    (
+        re.compile(
+            r"(?i)(api[-_]?key|secret|password|bearer|token)\s*[:=]\s*['\"]?([a-zA-Z0-9_\-\.]{8,})['\"]?"
+        ),
+        r"\1: [REDACTED]",
+    ),
+    (re.compile(r"sk-[a-zA-Z0-9]{20,}"), "[REDACTED]"),
+    (re.compile(r"AIzaSy[a-zA-Z0-9_-]{33}"), "[REDACTED]"),
 ]
 
 
@@ -17,8 +21,8 @@ class SecretScrubberFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         original = super().format(record)
         scrubbed = original
-        for pattern in SECRET_PATTERNS:
-            scrubbed = pattern.sub(r"\1: [REDACTED]", scrubbed)
+        for pattern, replacement in SECRET_PATTERNS:
+            scrubbed = pattern.sub(replacement, scrubbed)
         return scrubbed
 
 

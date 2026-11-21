@@ -111,6 +111,70 @@ class EchoWebSocket {
       conversation_id,
     });
   }
+
+  // Voice controls ---------------------------------------------------------
+
+  public voiceStart() {
+    this.send({ type: 'voice_start' });
+  }
+
+  public voiceStop() {
+    this.send({ type: 'voice_stop' });
+  }
+
+  public voiceRequestStatus() {
+    this.send({ type: 'voice_status_request' });
+  }
+
+  public voicePushToTalkStart(conversation_id?: string) {
+    this.send({ type: 'voice_ptt_start', conversation_id });
+  }
+
+  public voicePushToTalkStop() {
+    this.send({ type: 'voice_ptt_stop' });
+  }
+
+  public voiceStopSpeaking() {
+    this.send({ type: 'voice_stop_speaking' });
+  }
+
+  public voiceMute() {
+    this.send({ type: 'voice_mute' });
+  }
+
+  public voiceUnmute() {
+    this.send({ type: 'voice_unmute' });
+  }
+
+  public voiceDismiss() {
+    this.send({ type: 'voice_dismiss' });
+  }
+
+  public voiceSetConversation(conversation_id: string) {
+    this.send({ type: 'voice_set_conversation', conversation_id });
+  }
+
+  // Monitoring -------------------------------------------------------------
+
+  public monitorRequestStatus() {
+    this.send({ type: 'monitor_status_request' });
+  }
+
+  public monitorStart() {
+    this.send({ type: 'monitor_start' });
+  }
+
+  public monitorStop() {
+    this.send({ type: 'monitor_stop' });
+  }
+
+  public monitorAcknowledge(alert_id: string) {
+    this.send({ type: 'monitor_acknowledge', alert_id });
+  }
+
+  public monitorResolve(alert_id: string) {
+    this.send({ type: 'monitor_resolve', alert_id });
+  }
 }
 
 export const echoWs = new EchoWebSocket();

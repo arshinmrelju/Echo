@@ -1,11 +1,37 @@
+import asyncio
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 import uuid
 from fastapi import APIRouter, HTTPException, Query
 from echo.api.schemas import TaskCreateRequest, TaskResponse, TaskUpdateRequest
 from echo.core.database import get_database
+from echo.core.events import Event, get_event_bus
+from echo.memory.store import get_memory_store
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["Tasks"])
+
+
+def _publish_task(task: Dict[str, Any]) -> None:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    loop.create_task(
+        get_event_bus().publish(
+            Event(
+                topic="task_updated",
+                payload={
+                    "task": {
+                        "id": task.get("id"),
+                        "goal": task.get("goal"),
+                        "status": task.get("status"),
+                        "error": task.get("error"),
+                        "origin": "local",
+                    }
+                },
+            )
+        )
+    )
 
 
 @router.get("", response_model=List[TaskResponse])
@@ -40,7 +66,7 @@ async def create_task(req: TaskCreateRequest):
             """,
             (task_id, req.conversation_id, req.goal.strip(), now_str, now_str),
         )
-    return TaskResponse(
+    task = TaskResponse(
         id=task_id,
         conversation_id=req.conversation_id,
         goal=req.goal.strip(),
@@ -48,6 +74,11 @@ async def create_task(req: TaskCreateRequest):
         created_at=now_str,
         updated_at=now_str,
     )
+    _publish_task(task.model_dump())
+    get_memory_store().record_task_memory(
+        task_id=task.id, goal=task.goal, status=task.status
+    )
+    return task
 
 
 @router.patch("/{task_id}", response_model=TaskResponse)
@@ -64,7 +95,7 @@ async def update_task(task_id: str, req: TaskUpdateRequest):
 
         cur = conn.execute("SELECT * FROM tasks WHERE id = ?;", (task_id,))
         r = cur.fetchone()
-        return TaskResponse(
+        task = TaskResponse(
             id=r["id"],
             conversation_id=r["conversation_id"],
             goal=r["goal"],
@@ -72,6 +103,11 @@ async def update_task(task_id: str, req: TaskUpdateRequest):
             created_at=r["created_at"],
             updated_at=r["updated_at"],
         )
+    _publish_task({**task.model_dump(), "error": req.error})
+    get_memory_store().record_task_memory(
+        task_id=task.id, goal=task.goal, status=task.status, error=req.error
+    )
+    return task
 
 
 @router.delete("/{task_id}")

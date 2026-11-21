@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Plus,
+  FolderSearch,
   MessageSquare,
   Trash2,
   Brain,
@@ -11,9 +12,27 @@ import {
   Activity,
   Sliders,
   ShieldAlert,
+  Mic,
+  MicOff,
+  Radar,
+  Satellite,
 } from 'lucide-react';
-import { Conversation, SystemStatus } from '../types';
+import { Conversation, MonitorSeverity, SystemStatus } from '../types';
 import { StatusOrb } from './StatusOrb';
+
+const MONITOR_BADGE: Record<MonitorSeverity, string> = {
+  info: 'bg-echo-muted/20 text-echo-muted border border-echo-muted/30',
+  notice: 'bg-echo-blue/20 text-echo-blue border border-echo-blue/40',
+  warning: 'bg-echo-warning text-echo-void',
+  critical: 'bg-echo-danger text-white animate-pulse',
+};
+
+const REMOTE_TONE: Record<'LINKED' | 'OFFLINE' | 'IDLE' | 'PAUSED', { chip: string; dot: string }> = {
+  LINKED: { chip: 'text-echo-success', dot: 'bg-echo-success animate-pulse' },
+  OFFLINE: { chip: 'text-echo-danger', dot: 'bg-echo-danger' },
+  PAUSED: { chip: 'text-echo-warning', dot: 'bg-echo-warning' },
+  IDLE: { chip: 'text-echo-muted', dot: 'bg-echo-muted' },
+};
 
 interface SidebarProps {
   conversations: Conversation[];
@@ -25,11 +44,21 @@ interface SidebarProps {
   onOpenTasks: () => void;
   onOpenSettings: () => void;
   onOpenControlPanel: () => void;
+  onOpenMonitor: () => void;
+  onOpenRemote: () => void;
+  onOpenFiles: () => void;
   onToggleContext: () => void;
   isContextOpen: boolean;
   status: SystemStatus | null;
   isConnected: boolean;
   pendingApprovalsCount?: number;
+  voiceRunning?: boolean;
+  voiceMuted?: boolean;
+  monitorRunning?: boolean;
+  monitorAlertCount?: number;
+  monitorSeverity?: MonitorSeverity;
+  remoteState?: 'LINKED' | 'OFFLINE' | 'IDLE' | 'PAUSED';
+  remoteQueueCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -42,11 +71,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenTasks,
   onOpenSettings,
   onOpenControlPanel,
+  onOpenMonitor,
+  onOpenRemote,
+  onOpenFiles,
   onToggleContext,
   isContextOpen,
   status,
   isConnected,
   pendingApprovalsCount = 0,
+  voiceRunning = false,
+  voiceMuted = false,
+  monitorRunning = false,
+  monitorAlertCount = 0,
+  monitorSeverity = 'info',
+  remoteState = 'IDLE',
+  remoteQueueCount = 0,
 }) => {
   return (
     <aside className="w-64 flex flex-col bg-[#07090E] border-r border-echo-border select-none">
@@ -148,6 +187,93 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         <button
+          onClick={onOpenMonitor}
+          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors border ${
+            monitorAlertCount > 0
+              ? 'bg-[#141007] border-echo-warning/30 text-white hover:border-echo-warning/60'
+              : 'text-gray-400 hover:text-white hover:bg-[#0F1420] border-transparent'
+          }`}
+          title="Open the system monitoring dashboard"
+        >
+          <div className="flex items-center gap-2.5">
+            <Radar
+              className={`w-4 h-4 ${
+                monitorAlertCount > 0
+                  ? monitorSeverity === 'critical'
+                    ? 'text-echo-danger'
+                    : 'text-echo-warning'
+                  : 'text-echo-cyan'
+              }`}
+            />
+            <span>System Monitor</span>
+          </div>
+          {monitorAlertCount > 0 ? (
+            <span
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold font-mono ${MONITOR_BADGE[monitorSeverity]}`}
+            >
+              <ShieldAlert className="w-3 h-3" /> {monitorAlertCount}
+            </span>
+          ) : (
+            <span
+              className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-[#161B22] font-mono ${
+                monitorRunning ? 'text-echo-success' : 'text-echo-muted'
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  monitorRunning ? 'bg-echo-success animate-pulse' : 'bg-echo-muted'
+                }`}
+              />
+              {monitorRunning ? 'LIVE' : 'IDLE'}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={onOpenRemote}
+          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors border ${
+            remoteState === 'PAUSED'
+              ? 'bg-[#141007] border-echo-warning/30 text-white hover:border-echo-warning/60'
+              : 'text-gray-400 hover:text-white hover:bg-[#0F1420] border-transparent'
+          }`}
+          title="Open the Telegram remote relay"
+        >
+          <div className="flex items-center gap-2.5">
+            <Satellite
+              className={`w-4 h-4 ${
+                remoteState === 'PAUSED'
+                  ? 'text-echo-warning'
+                  : remoteState === 'LINKED'
+                  ? 'text-echo-cyan'
+                  : 'text-echo-muted'
+              }`}
+            />
+            <span>Remote Relay</span>
+          </div>
+          <span
+            className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-[#161B22] font-mono ${REMOTE_TONE[remoteState].chip}`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${REMOTE_TONE[remoteState].dot}`} />
+            {remoteState}
+            {remoteQueueCount > 0 && <span className="text-echo-cyan">·{remoteQueueCount}</span>}
+          </span>
+        </button>
+
+        <button
+          onClick={onOpenFiles}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#0F1420] transition-colors"
+          title="Open file intelligence"
+        >
+          <div className="flex items-center gap-2.5">
+            <FolderSearch className="w-4 h-4 text-echo-cyan" />
+            <span>File Intelligence</span>
+          </div>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#161B22] text-echo-cyan font-mono">
+            LOCAL
+          </span>
+        </button>
+
+        <button
           onClick={onOpenTasks}
           className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#0F1420] transition-colors"
         >
@@ -186,7 +312,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-echo-success' : 'bg-echo-danger'}`} />
           <span>{isConnected ? status?.ai_provider || 'Connected' : 'Offline'}</span>
         </div>
-        <span>{status?.database === 'connected' ? 'WAL' : 'ERR'}</span>
+        <div className="flex items-center gap-2">
+          <span
+            className={`flex items-center gap-1 ${monitorRunning ? 'text-echo-cyan' : 'text-echo-muted'}`}
+            title={monitorRunning ? 'System monitoring active' : 'System monitoring idle'}
+          >
+            <Radar className="w-3 h-3" />
+            {monitorRunning ? 'MON' : '—'}
+          </span>
+          <span
+            className={`flex items-center gap-1 ${
+              voiceMuted ? 'text-echo-warning' : voiceRunning ? 'text-echo-cyan' : 'text-echo-muted'
+            }`}
+            title={
+              voiceMuted
+                ? 'Microphone muted'
+                : voiceRunning
+                ? 'Microphone open'
+                : 'Microphone closed'
+            }
+          >
+            {voiceMuted ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
+            {voiceRunning ? (voiceMuted ? 'MUTED' : 'MIC') : 'OFF'}
+          </span>
+          <span>{status?.database === 'connected' ? 'WAL' : 'ERR'}</span>
+        </div>
       </div>
     </aside>
   );

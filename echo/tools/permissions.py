@@ -1,9 +1,14 @@
+import asyncio
 from datetime import datetime, timezone
 import json
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 import uuid
 from pydantic import BaseModel, Field
 from echo.core.database import Database, get_database
+from echo.core.events import Event, get_event_bus
+
+
+ResolutionListener = Callable[["ApprovalRequest"], None]
 
 
 class ApprovalRequest(BaseModel):
@@ -25,6 +30,15 @@ class PermissionManager:
     def __init__(self, db: Optional[Database] = None):
         self.db = db or get_database()
         self._pending_approvals: Dict[str, ApprovalRequest] = {}
+        self._resolution_listeners: List[ResolutionListener] = []
+
+    def add_resolution_listener(self, listener: ResolutionListener) -> None:
+        if listener not in self._resolution_listeners:
+            self._resolution_listeners.append(listener)
+
+    def remove_resolution_listener(self, listener: ResolutionListener) -> None:
+        if listener in self._resolution_listeners:
+            self._resolution_listeners.remove(listener)
 
     def request_approval(
         self,
@@ -43,7 +57,28 @@ class PermissionManager:
             status="pending",
         )
         self._pending_approvals[req_id] = req
+        self._emit(
+            "approval_request",
+            {
+                "approval": {
+                    "id": req.id,
+                    "tool_name": req.tool_name,
+                    "args": req.args,
+                    "category": req.category,
+                    "description": req.description,
+                    "status": req.status,
+                    "created_at": req.created_at,
+                }
+            },
+        )
         return req
+
+    def _emit(self, topic: str, payload: Dict[str, Any]) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(get_event_bus().publish(Event(topic=topic, payload=payload)))
 
     def get_request(self, request_id: str) -> Optional[ApprovalRequest]:
         return self._pending_approvals.get(request_id)
@@ -58,6 +93,22 @@ class PermissionManager:
         now_str = datetime.now(timezone.utc).isoformat()
         req.status = "approved" if approved else "denied"
         req.resolved_at = now_str
+        for listener in list(self._resolution_listeners):
+            try:
+                listener(req)
+            except Exception:
+                pass
+        self._emit(
+            "approval_resolved",
+            {
+                "approval": {
+                    "id": req.id,
+                    "tool_name": req.tool_name,
+                    "status": req.status,
+                    "resolved_at": req.resolved_at,
+                }
+            },
+        )
         return req
 
 

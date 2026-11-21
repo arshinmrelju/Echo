@@ -11,3 +11,9 @@ pillow>=10.0.0
 mss>=9.0.0
 pyautogui>=0.9.54
 pyperclip>=1.8.2
+
+# Voice (offline STT/TTS; CTranslate2 arrives transitively with faster-whisper)
+numpy>=1.26.0
+sounddevice>=0.4.6
+faster-whisper>=1.0.0
+pyttsx3>=2.90

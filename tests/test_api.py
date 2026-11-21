@@ -121,3 +121,129 @@ async def test_tasks_api(async_client):
 
     res = await async_client.delete(f"/api/v1/tasks/{t_id}")
     assert res.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_memory_api_lifecycle(async_client, monkeypatch, temp_db):
+    from echo.memory.store import MemoryStore
+
+    store = MemoryStore(db=temp_db)
+    monkeypatch.setattr("echo.api.routes.memory.get_memory_store", lambda: store)
+
+    res = await async_client.post(
+        "/api/v1/memory",
+        json={"category": "fact", "key": "api_secret_token", "content": "secret value"},
+    )
+    assert res.status_code == 422
+
+    res = await async_client.post(
+        "/api/v1/memory",
+        json={
+            "category": "fact",
+            "key": "api_secret_token",
+            "content": "rotated token value",
+            "allow_sensitive": True,
+            "pinned": True,
+            "tags": ["credentials"],
+        },
+    )
+    assert res.status_code == 200
+    entry = res.json()
+    memory_id = entry["id"]
+    assert entry["sensitivity"] == "high"
+    assert entry["permission_granted"] is True
+    assert entry["pinned"] is True
+
+    res = await async_client.patch(
+        f"/api/v1/memory/{memory_id}",
+        json={"content": "rotated again", "pinned": False},
+    )
+    assert res.status_code == 200
+    assert res.json()["pinned"] is False
+
+    res = await async_client.get("/api/v1/memory/stats")
+    assert res.status_code == 200
+    assert res.json()["total"] == 1
+    assert res.json()["sensitive"] == 1
+
+    res = await async_client.get("/api/v1/memory/export")
+    assert res.status_code == 200
+    assert res.json()["count"] == 1
+
+    res = await async_client.post("/api/v1/memory/clear", json={"confirm": False})
+    assert res.status_code == 400
+
+    res = await async_client.post(
+        "/api/v1/memory/clear", json={"category": "fact", "confirm": True}
+    )
+    assert res.status_code == 200
+    assert res.json()["removed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_files_api_workflow(async_client, monkeypatch, temp_db, temp_dir):
+    from echo.files.service import FileIntelligenceService
+
+    service = FileIntelligenceService(db=temp_db)
+    monkeypatch.setattr("echo.api.routes.files.get_file_service", lambda: service)
+
+    root = temp_dir / "api-docs"
+    root.mkdir()
+    (root / "report.txt").write_text("Quarterly report about Apollo.", encoding="utf-8")
+    (root / "second.txt").write_text("Second note.", encoding="utf-8")
+    (root / "data.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+
+    res = await async_client.post(
+        "/api/v1/files/directories",
+        json={"path": str(root), "label": "API docs", "index_now": True},
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["directory"]["file_count"] == 3
+    assert payload["index"]["indexed"] == 3
+
+    res = await async_client.get("/api/v1/files/search", params={"q": "Apollo"})
+    assert res.status_code == 200
+    assert res.json()["total"] == 1
+    assert res.json()["results"][0]["name"] == "report.txt"
+
+    res = await async_client.get("/api/v1/files/categories")
+    assert res.status_code == 200
+    categories = {item["category"]: item["count"] for item in res.json()["categories"]}
+    assert categories["document"] == 2
+    assert categories["spreadsheet"] == 1
+
+    res = await async_client.get("/api/v1/files/details", params={"path": str(root / "report.txt")})
+    assert res.status_code == 200
+    assert "Apollo" in res.json()["preview"]
+
+    outside = temp_dir / "outside.txt"
+    outside.write_text("outside", encoding="utf-8")
+    res = await async_client.get("/api/v1/files/details", params={"path": str(outside)})
+    assert res.status_code == 403
+
+    res = await async_client.put(
+        "/api/v1/files/settings", json={"bulk_confirm_threshold": 2}
+    )
+    assert res.status_code == 200
+
+    res = await async_client.post(
+        "/api/v1/files/organize",
+        json={"directory": str(root), "dry_run": True},
+    )
+    assert res.status_code == 200
+    assert res.json()["planned"] == 3
+
+    res = await async_client.post(
+        "/api/v1/files/organize",
+        json={"directory": str(root), "dry_run": False, "confirm": False},
+    )
+    assert res.status_code == 409
+    assert res.json()["detail"]["plan"]["planned"] == 3
+
+    res = await async_client.get("/api/v1/files/activity")
+    assert res.status_code == 200
+    actions = {item["action"] for item in res.json()["actions"]}
+    assert "index" in actions
+    assert "directory.add" in actions
+

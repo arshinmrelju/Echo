@@ -2,6 +2,8 @@
 
 This roadmap is deliberately staged. Each stage must be independently runnable, tested, documented, and useful before the next begins. Later stages may be re-ordered only when a dependency is preserved.
 
+> **Implementation note:** the build order diverged from the numbering below. Desktop Control shipped as build Stage 2, Voice as Stage 3, System Monitoring as Stage 4, and the Remote Relay (M12) as Stage 5 (this document still calls Monitoring "S10" and Voice "M9"). The original long-range numbering is preserved so dependency references stay stable; `README.md` lists the shipped order.
+
 **Guiding rule:** build the safety and observability layers *before* granting the agent side effects.
 
 ---
@@ -76,7 +78,7 @@ A stage is complete only when all of the following are true:
 
 ---
 
-## Stage 1 — Foundation & Shell
+## Stage 1 — Foundation & Shell ✅
 
 **Goal:** A runnable, observable skeleton with a premium UI shell and no AI behavior yet.
 
@@ -115,7 +117,7 @@ A stage is complete only when all of the following are true:
 
 ---
 
-## Stage 2 — AI Brain & Conversation
+## Stage 2 — AI Brain & Conversation ✅
 
 **Goal:** Real streaming conversation against a local or OpenAI-compatible model, with honest failure states.
 
@@ -334,39 +336,50 @@ A stage is complete only when all of the following are true:
 
 ---
 
-## Stage 9 — Voice Interaction
+## Stage 9 — Voice Interaction ✅ (shipped as Stage 3)
 
 **Goal:** Natural hands-free use with local, private speech processing.
 
-**Scope**
+**Implementation status**
 
-- Audio device selection, input level meter, and permission diagnostics.
-- VAD (Silero) and offline wake word (openWakeWord; default “Hey Echo”).
-- STT with faster-whisper (local, configurable model size); push-to-talk fallback.
-- TTS with Piper (local) and Windows SAPI fallback; voice selection and speed.
-- Barge-in: user speech interrupts playback; wake word during playback is handled safely.
-- Voice session state machine and UI orb: idle, listening, thinking, speaking, muted, error.
-- Privacy: no raw audio persisted by default; optional debug clips require explicit opt-in and retention limits.
-- Latency instrumentation and a voice diagnostics panel.
+Shipped in `echo/voice` with a companion voice console in the frontend. All audio processing is local; there are no cloud speech calls.
 
-**Explicitly out of scope:** always-on cloud STT, voice cloning, far-field multi-microphone arrays.
+**Delivered scope**
+
+- Audio device enumeration and selection, live input level meter, and diagnostics (installed packages, model availability, latency, last error).
+- Energy-gated VAD and endpointing (`echo/voice/vad.py`). Silero VAD was not needed for this stage and remains a possible upgrade.
+- Wake word: default `echo` plus configurable aliases, detected by local Whisper keyword spotting on short energy-gated segments with a sensitivity threshold. openWakeWord remains the planned upgrade for lower CPU and fewer false wakes.
+- STT: local `faster-whisper` (`tiny.en`, int8 CPU by default), configurable model/device/language, partial transcription while speaking.
+- TTS: Windows SAPI via `pyttsx3`, voice selection, rate, volume, sentence-chunked queue. Piper remains the planned higher-quality offline engine.
+- Three modes: push-to-talk, wake word, and continuous conversation with timeout; state machine `idle → listening → processing → speaking → idle` plus `muted` and `error`.
+- Barge-in: sustained microphone energy during playback cancels TTS; a pre-roll ring buffer preserves the start of the interrupting utterance.
+- Voice console UI: state orb with level-reactive ring, transcript with partial text, mute/stop-speaking/dismiss, mode selector, wake notice, and privacy indicator.
+- Privacy: mic state always visible; mute suspends capture; raw audio memory-only by default; debug WAVs require explicit opt-in with count-based retention and a purge action.
+- Latency instrumentation surfaced in `voice_timing` events and the diagnostics panel.
+
+**Explicitly out of scope (unchanged):** always-on cloud STT, voice cloning, far-field multi-microphone arrays.
 
 **Acceptance criteria**
 
-- Wake word triggers reliably in a quiet room with a documented false-positive test.
-- A spoken command is transcribed, answered, and spoken back.
-- Barge-in stops TTS within 300 ms.
-- Push-to-talk works when wake word is disabled.
+- Wake word triggers on synthesized speech and non-wake phrases do not, both covered by tests.
+- A spoken command is transcribed, answered through the shared chat turn service, and spoken back.
+- Stop-speaking cancels playback within ~300 ms; barge-in cancels on sustained speech.
+- Push-to-talk works with the wake word disabled.
 - Audio is not written to disk by default; the claim is verified by test.
 - Missing microphone or model files produce actionable errors, not crashes.
 
+**Known limitations:** SAPI voice quality is system-dependent; `tiny.en` accuracy is modest; the first run downloads the Whisper model; wake-word reliability depends on microphone gain and sensitivity tuning.
+
 **Primary risks:** false wakes, accent/STT accuracy, CPU contention, echo feedback.
+
 
 ---
 
-## Stage 10 — Monitoring & Notifications
+## Stage 10 — Monitoring & Notifications ✅ (monitoring shipped as Stage 4)
 
 **Goal:** ECHO notices what matters and tells the user without becoming noisy.
+
+> **Shipped in build Stage 4:** the monitoring half of this stage is implemented in `echo/monitoring` and the System Observatory UI. Telemetry, Event Log watching, threshold persistence, deduplication, cooldowns, escalation, recovery, acknowledgement/resolution, profiles, persistence, REST/WS, and the live dashboard are complete and verified. Telegram delivery shipped as build Stage 5 through the remote relay's queued notifications. Windows toast, SMTP email, quiet hours, digest batching, and rule templates remain planned under Stage 11 (Notifications).
 
 **Scope**
 
@@ -424,9 +437,13 @@ A stage is complete only when all of the following are true:
 
 ---
 
-## Stage 12 — Remote Contact & Optional Calls
+## Stage 12 — Remote Contact & Optional Calls ✅ (remote relay shipped as Stage 5)
 
 **Goal:** Reach the user when it matters, and allow safe remote decisions.
+
+> **Shipped in build Stage 5:** the Telegram relay is implemented in `echo/remote` with the Remote Relay UI. Outbound long polling, bot token and owner verification, explicit one-time pairing, a read-only allowed-user list, `/ask`, `/task`, `/status`, `/health`, `/events`, `/tasks`, `/screenshot`, `/open`, `/approve`, `/deny`, `/pause`, and `/resume`, remote task history, owner-only screenshots, argument-bound approvals, rate limiting, credential blocking, command and rejection audit rows, severity-routed notifications with a persistence/backoff/collapse queue, and reconnect summaries are complete and verified. Email digests, phone-call escalation, the escalation matrix, quiet hours, and the incident timeline remain planned.
+
+> **Verified in build Stage 5:** unauthorized IDs are rejected and audited; pairing codes are hashed, single-use, and expire; allowed users are read-only; `/approve` and desktop approval execute once; screenshots reach only the paired owner; rate limits are enforced and audited; credential requests are refused; queued notifications expire, collapse, and summarize on reconnect.
 
 **Scope**
 
